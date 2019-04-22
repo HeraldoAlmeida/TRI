@@ -89,7 +89,7 @@ for area in [ 'LC' , 'CH' , 'CN' , 'MT' ] :
                     'TX_RESPOSTAS_'+area,
                     'TX_GABARITO_'+area
                     ]
-            ,nrows=100000
+            ,nrows=1000
             ).dropna().sort_values(by=['NU_INSCRICAO'])
 
 
@@ -313,5 +313,3 @@ for area in [ 'LC' , 'CH' , 'CN' , 'MT' ] :
 
         
 #        print ( '\nparticipante_theta[j] = %f\n' % participante_theta[j] )
-        
-            
