@@ -51,7 +51,7 @@ from sklearn.linear_model import LogisticRegression
 #  Importar os itens das provas (conjunto de treinamento)
 #------------------------------------------------------------------------------
 
-df_itens_prova = pd.read_csv(
+df_itens = pd.read_csv(
         ENEM2017_ITENS,
         encoding = "ISO-8859-1",
         sep = ';',
@@ -68,7 +68,7 @@ df_itens_prova = pd.read_csv(
 #  PARA CADA AREA DE CONHECIMENTO ...
 #==============================================================================
 
-for area in [ 'LC' , 'CH' , 'CN' , 'MT' ] :
+for area in [ 'MT' , 'CH' , 'CN' , 'LC' ] :
 
     print ( '\nArea de Conhecimento %s :\n' % area )
    
@@ -89,7 +89,7 @@ for area in [ 'LC' , 'CH' , 'CN' , 'MT' ] :
                     'TX_RESPOSTAS_'+area,
                     'TX_GABARITO_'+area
                     ]
-            ,nrows=1000
+            ,nrows=100000
             ).dropna().sort_values(by=['NU_INSCRICAO'])
 
 
@@ -127,14 +127,14 @@ for area in [ 'LC' , 'CH' , 'CN' , 'MT' ] :
     #    - considerar somente os itens da area de conhecimento a ser medida
     #--------------------------------------------------------------------------
     
-    df_itens  = df_itens_prova.loc[df_itens_prova['SG_AREA'] == area].sort_values(by=['CO_ITEM']).drop(columns=['SG_AREA'])
+    df_itens_area  = df_itens.loc[df_itens['SG_AREA'] == area].sort_values(by=['CO_ITEM']).drop(columns=['SG_AREA'])
     
     #--------------------------------------------------------------------------
     #  Filtro opcional para considerar somente as provas principais
     #--------------------------------------------------------------------------
 
     if FILTRAR_SOMENTE_PROVAS_PRINCIPAIS:
-        df_itens         = df_itens.loc[df_itens['CO_PROVA'] <= 406]
+        df_itens_area    = df_itens_area.loc[df_itens['CO_PROVA'] <= 406]
         df_participantes = df_participantes.loc[df_participantes['CO_PROVA'] <= 406]
 
     #--------------------------------------------------------------------------
@@ -149,7 +149,7 @@ for area in [ 'LC' , 'CH' , 'CN' , 'MT' ] :
     #
     #--------------------------------------------------------------------------
 
-    item             = df_itens['CO_ITEM'].unique()
+    item             = df_itens_area['CO_ITEM'].unique()
     item_parametro_a = np.empty ( ( item.size , 1 ) , dtype=np.float64 );
     item_parametro_b = np.empty ( ( item.size , 1 ) , dtype=np.float64 );
 
@@ -176,30 +176,38 @@ for area in [ 'LC' , 'CH' , 'CN' , 'MT' ] :
     #  Preencher a matriz de resultados
     #--------------------------------------------------------------------------
 
+    print ( ' Iniciando o preenchimento da matriz de resultados ... ' )
+
     resultado = np.ones ( ( participante.size , item.size ) , dtype=np.uint8 ) * 2
     
-    j = 0
-    
-    for p in df_participantes.itertuples():
-        
-        itens = np.searchsorted ( item , df_itens.loc[df_itens['CO_PROVA'] == p.CO_PROVA]['CO_ITEM'].values )
+    for prova in df_itens_area['CO_PROVA'].unique() :
 
-        resultados = np.asarray([ int(x==y) for (x,y) in zip(list(p.TX_RESPOSTAS), list(p.TX_GABARITO))])
-        
-        if area == 'LC':
-            if p.TP_LINGUA == 0:
-                itens      = np.concatenate ( ( itens[0:5]      , itens[10:]      ) )
-                resultados = np.concatenate ( ( resultados[0:5] , resultados[10:] ) )
-            else:
-                itens      = itens[5:]
-                resultados = resultados[5:]
+        itens = np.searchsorted ( item , df_itens_area.loc[df_itens_area['CO_PROVA'] == prova].sort_values(by=['CO_POSICAO'])['CO_ITEM'].values )
 
-        resultado[j,itens] = resultados
-        
-        acertos = sum(resultados[resultados==1])
-        participante_acertos[j] = acertos
-        j = j + 1
+        #print('provas = ',prova,'itens = ',itens)    
     
+        j = 0
+        
+        for p in df_participantes.itertuples():
+            
+            resultados = np.asarray([ int(x==y) for (x,y) in zip(list(p.TX_RESPOSTAS), list(p.TX_GABARITO))])
+            
+            item_mask = itens
+            if area == 'LC':
+                if p.TP_LINGUA == 0:
+                    item_mask  = np.concatenate ( ( itens[0:5]      , itens[10:]      ) )
+                    resultados = np.concatenate ( ( resultados[0:5] , resultados[10:] ) )
+                else:
+                    item_mask  = itens[5:]
+                    resultados = resultados[5:]
+    
+            resultado[j,item_mask] = resultados
+            
+            participante_acertos[j] = sum(resultados)
+            j = j + 1
+        
+    print ( ' Fim do preenchimento. ' )
+
     #--------------------------------------------------------------------------
     #  Inicializar o parametro theta para todos os participantes
     #--------------------------------------------------------------------------
@@ -267,6 +275,8 @@ for area in [ 'LC' , 'CH' , 'CN' , 'MT' ] :
         #  Estimar os parametros a e b para cada item
         #----------------------------------------------------------------------
 
+        print ( ' Estimando os parametros a e b para cada item ... ' )
+
         for i in range(item.size) :
            
             indices_dos_participantes = np.array((resultado[:,i]-2).nonzero()[0])
@@ -290,6 +300,8 @@ for area in [ 'LC' , 'CH' , 'CN' , 'MT' ] :
         #  Estimar o parametro theta para cada participante
         #----------------------------------------------------------------------
         
+        print ( ' Estimando o parametro theta para cada participante ... ' )
+
         for j in range(participante.size) :
 
             indices_dos_itens = np.array((resultado[j,:]-2).nonzero()[0])
